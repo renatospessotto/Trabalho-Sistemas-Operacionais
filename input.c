@@ -1,95 +1,126 @@
 #include "input.h"
 #include "interface.h"
+#include "economia.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <ncurses.h>
+#include <pthread.h>
 
-Etapa etapa_selecionada = LAVAR; // Etapa inicial selecionada
+int etapa_selecionada = 0;
 
-void mostrar_etapa_selecionada() {
+void mostrar_menu_upgrades() {
+    // Ao entrar no menu, bloqueamos a thread de update visual automático
+    bloquear_interface();
+    
+    // PROTEÇÃO TOTAL: Pegamos o mutex para desenhar o menu sem interferência
     pthread_mutex_lock(&status_interface.tela_mutex);
     
-    // Limpar indicador anterior
-    for (int i = 0; i < 4; i++) {
-        int linha = 4 + (i * 6);
-        mvprintw(linha, 0, " ");
-    }
+    clear(); // Limpa tudo
     
-    // Mostrar indicador na etapa selecionada
-    int linha_selecionada = 4 + (etapa_selecionada * 6);
     attron(COLOR_PAIR(1) | A_BOLD);
-    mvprintw(linha_selecionada, 0, ">");
+    mvprintw(2, 15, "=== MENU DE UPGRADES ===");
     attroff(COLOR_PAIR(1) | A_BOLD);
     
-    // Atualizar instruções
-    attron(COLOR_PAIR(3));
-    mvprintw(2, 5, "Etapa selecionada: %d (%s) | [+/-] Ajustar | [1-4] Trocar etapa | [q] Sair   ", 
-             etapa_selecionada + 1, 
-             (etapa_selecionada == LAVAR) ? "LAVAR" :
-             (etapa_selecionada == CORTAR) ? "CORTAR" :
-             (etapa_selecionada == EXTRAIR) ? "EXTRAIR" : "EMBALAR");
-    attroff(COLOR_PAIR(3));
+    attron(COLOR_PAIR(2) | A_BOLD);
+    mvprintw(4, 5, "Dinheiro disponivel: R$ %.2f", obter_dinheiro());
+    attroff(COLOR_PAIR(2) | A_BOLD);
+    
+    const char* nomes[] = {"LAVAR", "CORTAR", "EXTRAIR", "EMBALAR"};
+    
+    for(int i = 0; i < 4; i++) {
+        int linha = 7 + (i * 3);
+        
+        if(i == etapa_selecionada) {
+            attron(COLOR_PAIR(3) | A_BOLD);
+            mvprintw(linha, 3, ">");
+            attroff(COLOR_PAIR(3) | A_BOLD);
+        }
+        
+        attron(COLOR_PAIR(1));
+        mvprintw(linha, 5, "[%d] %s", i+1, nomes[i]);
+        attroff(COLOR_PAIR(1));
+        
+        int nivel_vel = obter_nivel_velocidade(i);
+        int nivel_qual = obter_nivel_qualidade(i);
+        
+        mvprintw(linha + 1, 8, "Velocidade: Nv%d (Custo: R$ %d)", nivel_vel, obter_custo_velocidade(i));
+        mvprintw(linha + 2, 8, "Qualidade:  Nv%d (Custo: R$ %d)", nivel_qual, obter_custo_qualidade(i));
+    }
+    
+    attron(COLOR_PAIR(5));
+    mvprintw(19, 5, "INSTRUCOES:");
+    mvprintw(20, 5, "[1-4] Selecionar | [V]elocidade | [Q]ualidade | [ESC] Sair");
+    attroff(COLOR_PAIR(5));
     
     refresh();
+    
+    // Liberamos o mutex após desenhar
     pthread_mutex_unlock(&status_interface.tela_mutex);
+}
+
+void processar_input_upgrades() {
+    int ch;
+    while(1) {
+        // PROTEÇÃO NO INPUT TAMBÉM
+        pthread_mutex_lock(&status_interface.tela_mutex);
+        ch = getch();
+        pthread_mutex_unlock(&status_interface.tela_mutex);
+        
+        if(ch == 27 || ch == '\n') break; 
+        
+        if(ch == ERR) {
+            usleep(10000);
+            continue;
+        }
+
+        if(ch >= '1' && ch <= '4') {
+            etapa_selecionada = ch - '1';
+            mostrar_menu_upgrades();
+        } 
+        else if(ch == 'v' || ch == 'V') {
+            comprar_upgrade_velocidade(etapa_selecionada);
+            mostrar_menu_upgrades();
+        }
+        else if(ch == 'q' || ch == 'Q') {
+            comprar_upgrade_qualidade(etapa_selecionada);
+            mostrar_menu_upgrades();
+        }
+    }
+    desbloquear_interface();
 }
 
 void* thread_input(void* arg) {
     int ch;
-    
-    // Mostrar etapa selecionada inicial
-    sleep(1); // Dar tempo para a interface se inicializar
-    mostrar_etapa_selecionada();
-    
-    while ((ch = getch()) != 'q') {
-        switch (ch) {
-            case '+':
-                // Incrementar máquinas na etapa selecionada
-                incrementar_maquinas_etapa(etapa_selecionada);
-                break;
-                
-            case '-':
-                // Decrementar máquinas na etapa selecionada
-                decrementar_maquinas_etapa(etapa_selecionada);
-                break;
-                
-            case '1':
-                etapa_selecionada = LAVAR;
-                mostrar_etapa_selecionada();
-                break;
-                
-            case '2':
-                etapa_selecionada = CORTAR;
-                mostrar_etapa_selecionada();
-                break;
-                
-            case '3':
-                etapa_selecionada = EXTRAIR;
-                mostrar_etapa_selecionada();
-                break;
-                
-            case '4':
-                etapa_selecionada = EMBALAR;
-                mostrar_etapa_selecionada();
-                break;
-                
-            case 'r':
-            case 'R':
-                // Redesenhar tela completa
-                desenhar_interface_completa();
-                mostrar_etapa_selecionada();
-                break;
-                
-            default:
-                // Ignorar outras teclas
-                break;
+    while (1) {
+        if (interface_esta_bloqueada()) {
+            usleep(50000);
+            continue;
         }
         
-        // Pequena pausa para evitar input muito rápido
-        usleep(50000); // 50ms
+        // --- A CORREÇÃO MÁGICA ---
+        // getch() não é thread-safe. Precisamos proteger o acesso ao terminal.
+        // Se a interface estiver desenhando, o input espera.
+        pthread_mutex_lock(&status_interface.tela_mutex);
+        ch = getch();
+        pthread_mutex_unlock(&status_interface.tela_mutex);
+        
+        if (ch == 'x' || ch == 'X' || ch == 'q' || ch == 'Q') break;
+        
+        if (ch == ERR) {
+            usleep(50000);
+            continue;
+        }
+        
+        switch (ch) {
+            case '1': case '2': case '3': case '4':
+                etapa_selecionada = ch - '1';
+                break;
+            case 'u': case 'U':
+                mostrar_menu_upgrades();
+                processar_input_upgrades();
+                break;
+        }
     }
-    
-    endwin();
-    exit(0);
+    return NULL;
 }

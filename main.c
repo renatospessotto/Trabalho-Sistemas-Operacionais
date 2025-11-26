@@ -1,45 +1,61 @@
 #include <pthread.h>
 #include <stdlib.h>
-#include <time.h>
 #include <unistd.h>
-#include "fruta.h"
+#include "config.h"
+#include "buffers.h"
 #include "etapas.h"
 #include "interface.h"
 #include "input.h"
-#include "utils.h"
+#include "economia.h"
 
 int main() {
-    pthread_t frutas[MAX_FRUTAS], input;
-    Fruta dados[MAX_FRUTAS];
+    // 1. Inicializações
+    inicializar_economia();
+    init_interface();
+    
+    // Inicializar Buffers (CRÍTICO)
+    init_buffer(&buffer_colheita_lavagem);
+    init_buffer(&buffer_lavagem_corte);
+    init_buffer(&buffer_corte_extracao);
+    init_buffer(&buffer_extracao_embalagem);
 
-    // Inicializar gerador de números aleatórios
-    srand(time(NULL));
+    // 2. Criar Threads
+    pthread_t t_input, t_interface;
+    pthread_t t_colheita, t_lavar, t_cortar, t_extrair, t_embalar;
 
-    // Inicializar interface e etapas
-    iniciar_tela();
-    init_etapas();
+    // Interface e Input
+    pthread_create(&t_input, NULL, thread_input, NULL);
+    // Thread dedicada para atualizar a tela (FPS)
+    pthread_create(&t_interface, NULL, thread_atualizador_interface, NULL);
 
-    // Criar thread de input
-    pthread_create(&input, NULL, thread_input, NULL);
+    // Operários da Fábrica (Pipeline)
+    pthread_create(&t_colheita, NULL, thread_colheita, NULL);
+    pthread_create(&t_lavar, NULL, thread_lavar, NULL);
+    pthread_create(&t_cortar, NULL, thread_cortar, NULL);
+    pthread_create(&t_extrair, NULL, thread_extrair, NULL);
+    pthread_create(&t_embalar, NULL, thread_embalar, NULL);
 
-    // Criar threads das frutas com intervalo
-    for (int i = 0; i < MAX_FRUTAS; i++) {
-        dados[i].id = i + 1;
-        pthread_create(&frutas[i], NULL, thread_fruta, &dados[i]);
-        sleep(2); // Intervalo de 2 segundos entre criação das frutas
-    }
+    // 3. Loop principal (espera o input sair)
+    pthread_join(t_input, NULL);
 
-    // Aguardar conclusão de todas as frutas
-    for (int i = 0; i < MAX_FRUTAS; i++) {
-        pthread_join(frutas[i], NULL);
-    }
+    // 4. Limpeza (Ao sair do jogo)
+    // Cancelar threads
+    pthread_cancel(t_colheita);
+    pthread_cancel(t_lavar);
+    pthread_cancel(t_cortar);
+    pthread_cancel(t_extrair);
+    pthread_cancel(t_embalar);
+    pthread_cancel(t_interface);
 
-    // Aguardar um pouco antes de encerrar para ver resultado final
-    sleep(3);
-
-    // Limpar recursos
-    encerrar_tela();
-    destroy_etapas();
+    salvar_progresso("savegame.txt");
+    
+    destroy_buffer(&buffer_colheita_lavagem);
+    destroy_buffer(&buffer_lavagem_corte);
+    destroy_buffer(&buffer_corte_extracao);
+    destroy_buffer(&buffer_extracao_embalagem);
+    
+    cleanup_interface();
+    finalizar_economia();
 
     return 0;
 }
