@@ -1,86 +1,94 @@
 #include "etapas.h"
+#include "buffers.h"
+#include "config.h"
 #include "interface.h"
-#include <semaphore.h>
-#include <stdlib.h>
+#include "economia.h"
 #include <unistd.h>
-#include <pthread.h>
+#include <stdlib.h>
 
-#define MAX_MAQUINAS 10
-#define MIN_MAQUINAS 1
-
-static sem_t sem_etapas[4];
-static int num_maquinas[4] = {2, 1, 1, 1}; // Valores iniciais
-static pthread_mutex_t maquinas_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void init_etapas() {
-    sem_init(&sem_etapas[LAVAR], 0, num_maquinas[LAVAR]);
-    sem_init(&sem_etapas[CORTAR], 0, num_maquinas[CORTAR]);
-    sem_init(&sem_etapas[EXTRAIR], 0, num_maquinas[EXTRAIR]);
-    sem_init(&sem_etapas[EMBALAR], 0, num_maquinas[EMBALAR]);
-}
-
-void destroy_etapas() {
-    for (int i = 0; i < 4; i++) {
-        sem_destroy(&sem_etapas[i]);
-    }
-    pthread_mutex_destroy(&maquinas_mutex);
-}
-
-void processar_etapa(Fruta* f, Etapa etapa) {
-    // Marcar que a fruta está tentando entrar na etapa (para mostrar na fila)
-    marcar_fruta_entrando_etapa(f->id, etapa);
+// Função auxiliar para simular trabalho
+void simular_trabalho(int etapa_id) {
+    float tempo_total = calcular_tempo_etapa(etapa_id);
     
-    sem_wait(&sem_etapas[etapa]);
+    // Avisa interface: "Estou ocupado"
+    iniciar_processamento_etapa(etapa_id, tempo_total);
     
-    // Simular tempo de processamento (1-3 segundos aleatório)
-    int tempo_processamento = 1 + (rand() % 3);
-    sleep(tempo_processamento);
-    
-    marcar_fruta_saindo_etapa(f->id, etapa);
-    sem_post(&sem_etapas[etapa]);
-}
-
-void incrementar_maquinas_etapa(Etapa etapa) {
-    pthread_mutex_lock(&maquinas_mutex);
-    
-    if (num_maquinas[etapa] < MAX_MAQUINAS) {
-        num_maquinas[etapa]++;
-        
-        // Atualizar o semáforo - incrementar o valor
-        sem_post(&sem_etapas[etapa]);
-        
-        // Atualizar interface
-        atualizar_maquinas_etapa(etapa, 1);
+    // Loop de espera visual
+    float tempo_restante = tempo_total;
+    while(tempo_restante > 0) {
+        usleep(100000); // 100ms
+        tempo_restante -= 0.1f;
+        atualizar_tempo_etapa(etapa_id, tempo_total - tempo_restante);
     }
     
-    pthread_mutex_unlock(&maquinas_mutex);
+    // Avisa interface: "Terminei, vou tentar passar pra frente"
+    finalizar_processamento_etapa(etapa_id);
 }
 
-void decrementar_maquinas_etapa(Etapa etapa) {
-    pthread_mutex_lock(&maquinas_mutex);
-    
-    if (num_maquinas[etapa] > MIN_MAQUINAS) {
-        // Verificar se podemos decrementar sem bloquear threads
-        int sem_value;
-        sem_getvalue(&sem_etapas[etapa], &sem_value);
+// --- THREAD 1: COLHEITA ---
+void* thread_colheita(void* arg) {
+    int id_counter = 1;
+    while(1) {
+        usleep(TEMPO_BASE_COLHEITA * 1000000);
         
-        if (sem_value > 0) {
-            num_maquinas[etapa]--;
-            
-            // Decrementar o semáforo
-            sem_wait(&sem_etapas[etapa]);
-            
-            // Atualizar interface
-            atualizar_maquinas_etapa(etapa, -1);
-        }
+        Fruta* f = criar_fruta(id_counter++);
+        
+        // Tenta colocar na fila. Se LAVAR estiver cheia, TRAVA AQUI.
+        depositar_fruta(&buffer_colheita_lavagem, f);
     }
-    
-    pthread_mutex_unlock(&maquinas_mutex);
+    return NULL;
 }
 
-int get_num_maquinas_etapa(Etapa etapa) {
-    pthread_mutex_lock(&maquinas_mutex);
-    int valor = num_maquinas[etapa];
-    pthread_mutex_unlock(&maquinas_mutex);
-    return valor;
+// --- THREAD 2: LAVAR ---
+void* thread_lavar(void* arg) {
+    while(1) {
+        // 1. Tenta pegar. Se não tiver fruta, TRAVA AQUI.
+        Fruta* f = retirar_fruta(&buffer_colheita_lavagem);
+        
+        // 2. Trabalha
+        simular_trabalho(ETAPA_LAVAR);
+        
+        // 3. Tenta passar. Se CORTAR estiver cheia, TRAVA AQUI.
+        // O status na tela ficará "LIVRE" (verde), mas a fila anterior vai encher
+        // porque esta máquina não voltou para o passo 1.
+        depositar_fruta(&buffer_lavagem_corte, f);
+    }
+    return NULL;
+}
+
+// --- THREAD 3: CORTAR ---
+void* thread_cortar(void* arg) {
+    while(1) {
+        Fruta* f = retirar_fruta(&buffer_lavagem_corte);
+        simular_trabalho(ETAPA_CORTAR);
+        depositar_fruta(&buffer_corte_extracao, f);
+    }
+    return NULL;
+}
+
+// --- THREAD 4: EXTRAIR ---
+void* thread_extrair(void* arg) {
+    while(1) {
+        Fruta* f = retirar_fruta(&buffer_corte_extracao);
+        simular_trabalho(ETAPA_EXTRAIR);
+        depositar_fruta(&buffer_extracao_embalagem, f);
+    }
+    return NULL;
+}
+
+// --- THREAD 5: EMBALAR ---
+void* thread_embalar(void* arg) {
+    while(1) {
+        // O último estágio só trava se não tiver fruta chegando
+        Fruta* f = retirar_fruta(&buffer_extracao_embalagem);
+        
+        simular_trabalho(ETAPA_EMBALAR);
+        
+        adicionar_receita(); 
+        fruta_concluida(f); 
+        
+        // A fruta sai do sistema aqui
+        destruir_fruta(f);
+    }
+    return NULL;
 }

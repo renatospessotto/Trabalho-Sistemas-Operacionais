@@ -1,315 +1,182 @@
 #include "interface.h"
-#include "utils.h"
-#include <ncurses.h>
+#include "etapas.h"
+#include "economia.h"
+#include "buffers.h" 
+#include "config.h"
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
-#include <stdio.h>
+#include <semaphore.h>
 
-// Estado global da interface
 StatusInterface status_interface = {
-    .frutas_em_etapa = {0, 0, 0, 0},
-    .num_maquinas = {2, 1, 1, 1}, // Valores iniciais dos semáforos
     .frutas_concluidas = 0,
-    .total_frutas = MAX_FRUTAS,
-    .tela_mutex = PTHREAD_MUTEX_INITIALIZER
+    // Inicialização estática correta
+    .tela_mutex = PTHREAD_MUTEX_INITIALIZER,
+    .interface_bloqueada = 0,
+    .tempo_restante = {0.0f, 0.0f, 0.0f, 0.0f},
+    .tempo_mutex = PTHREAD_MUTEX_INITIALIZER
 };
 
-// Nomes das etapas
 static const char* nomes_etapas[] = {
     "LAVAR", "CORTAR", "EXTRAIR", "EMBALAR"
 };
 
-// Símbolos simples para as frutas em cada etapa
-static const char* simbolos_etapas[] = {
-    "*", "X", "J", "P"
-};
-
-void iniciar_tela() {
+void init_interface() {
     initscr();
     noecho();
     cbreak();
     curs_set(0);
-    nodelay(stdscr, TRUE); // Para input não bloqueante
+    nodelay(stdscr, TRUE); // Input não-bloqueante é essencial
     
-    // Verificar se o terminal suporta cores
     if (has_colors()) {
         start_color();
-        init_pair(1, COLOR_GREEN, COLOR_BLACK);   // Títulos
-        init_pair(2, COLOR_YELLOW, COLOR_BLACK);  // Frutas processando
-        init_pair(3, COLOR_CYAN, COLOR_BLACK);    // Informações
-        init_pair(4, COLOR_RED, COLOR_BLACK);     // Filas
-        init_pair(5, COLOR_WHITE, COLOR_BLACK);   // Normal
+        init_pair(1, COLOR_GREEN, COLOR_BLACK);   
+        init_pair(2, COLOR_YELLOW, COLOR_BLACK);  
+        init_pair(3, COLOR_CYAN, COLOR_BLACK);    
+        init_pair(4, COLOR_RED, COLOR_BLACK);     
+        init_pair(5, COLOR_WHITE, COLOR_BLACK);   
     }
     
-    pthread_mutex_init(&status_interface.tela_mutex, NULL);
-    desenhar_interface_completa();
+    // ATENÇÃO: Não reinicializamos o mutex aqui para evitar UB, 
+    // pois ele já foi inicializado estaticamente acima.
 }
 
-void encerrar_tela() {
+void cleanup_interface() {
     pthread_mutex_destroy(&status_interface.tela_mutex);
     endwin();
 }
 
-void desenhar_interface_completa() {
-    pthread_mutex_lock(&status_interface.tela_mutex);
-    
-    clear();
-    
-    // Título principal
+void bloquear_interface() { status_interface.interface_bloqueada = 1; }
+void desbloquear_interface() { status_interface.interface_bloqueada = 0; }
+int interface_esta_bloqueada() { return status_interface.interface_bloqueada; }
+
+void desenhar_conteudo_interface() {
+    // Cabeçalho
     attron(COLOR_PAIR(1) | A_BOLD);
-    mvprintw(0, 25, "=== FABRICA DE SUCOS ===");
+    mvprintw(0, 15, "=== FABRICA DE SUCOS ===");
+    clrtoeol(); // Limpa o resto da linha com segurança
     attroff(COLOR_PAIR(1) | A_BOLD);
     
-    // Instruções de controle
-    attron(COLOR_PAIR(3));
-    mvprintw(1, 5, "Controles: [+/-] Ajustar maquinas | [1-4] Selecionar etapa | [q] Sair");
-    attroff(COLOR_PAIR(3));
-    
-    // Desenhar cada etapa
+    attron(COLOR_PAIR(2));
+    mvprintw(1, 2, "Dinheiro: R$ %.2f | Sucos Prontos: %d | Valor/suco: R$ %.2f", 
+             obter_dinheiro(), 
+             status_interface.frutas_concluidas,
+             calcular_valor_produto());
+    clrtoeol();
+    attroff(COLOR_PAIR(2));
+
     for (int i = 0; i < 4; i++) {
-        int linha_etapa = 4 + (i * 6);
+        int linha = 4 + (i * 4);
         
-        // Título da etapa
-        attron(COLOR_PAIR(1) | A_BOLD);
-        mvprintw(linha_etapa, 2, "ETAPA %d - %s", i + 1, nomes_etapas[i]);
-        attroff(COLOR_PAIR(1) | A_BOLD);
-        
-        // Número de máquinas disponíveis
-        attron(COLOR_PAIR(3));
-        mvprintw(linha_etapa + 1, 4, "Maquinas: %d", status_interface.num_maquinas[i]);
-        attroff(COLOR_PAIR(3));
-        
-        // Área de processamento
-        mvprintw(linha_etapa + 2, 4, "Processando: ");
-        
-        // Desenhar frutas em processamento
-        attron(COLOR_PAIR(2));
-        int frutas_processando = (status_interface.frutas_em_etapa[i] > status_interface.num_maquinas[i]) 
-                                ? status_interface.num_maquinas[i] 
-                                : status_interface.frutas_em_etapa[i];
-        
-        for (int j = 0; j < frutas_processando; j++) {
-            mvprintw(linha_etapa + 2, 17 + (j * 3), "%s", simbolos_etapas[i]);
-        }
-        attroff(COLOR_PAIR(2));
-        
-        // Fila de espera (se houver)
-        int fila_size = status_interface.frutas_em_etapa[i] - status_interface.num_maquinas[i];
-        if (fila_size > 0) {
-            attron(COLOR_PAIR(4));
-            mvprintw(linha_etapa + 3, 4, "Fila de espera: ");
-            for (int j = 0; j < fila_size; j++) {
-                mvprintw(linha_etapa + 3, 20 + (j * 2), ".");
-            }
-            attroff(COLOR_PAIR(4));
+        // Seleção
+        extern int etapa_selecionada;
+        if(i == etapa_selecionada) { 
+            attron(COLOR_PAIR(3) | A_BOLD);
+            mvprintw(linha, 0, ">");
+            attroff(COLOR_PAIR(3) | A_BOLD);
         } else {
-            mvprintw(linha_etapa + 3, 4, "Fila de espera: vazia");
+            mvprintw(linha, 0, " "); 
         }
         
-        // Linha separadora
-        mvprintw(linha_etapa + 4, 0, "--------------------------------------------------------");
+        // Nome da Etapa
+        attron(COLOR_PAIR(1));
+        mvprintw(linha, 2, "ETAPA %d - %s", i + 1, nomes_etapas[i]);
+        clrtoeol();
+        attroff(COLOR_PAIR(1));
+        
+        // Upgrades
+        mvprintw(linha + 1, 4, "Upgrades: Velocidade Nv%d | Qualidade Nv%d", 
+                 obter_nivel_velocidade(i), obter_nivel_qualidade(i));
+        clrtoeol();
+        
+        // Tempo (Leitura segura)
+        pthread_mutex_lock(&status_interface.tempo_mutex);
+        float tempo_rest = status_interface.tempo_restante[i];
+        pthread_mutex_unlock(&status_interface.tempo_mutex);
+        
+        // Fila Real
+        int fila_real = 0;
+        switch(i) {
+            case 0: fila_real = obter_tamanho_fila(&buffer_colheita_lavagem); break;
+            case 1: fila_real = obter_tamanho_fila(&buffer_lavagem_corte); break;
+            case 2: fila_real = obter_tamanho_fila(&buffer_corte_extracao); break;
+            case 3: fila_real = obter_tamanho_fila(&buffer_extracao_embalagem); break;
+        }
+
+        // Status Visual
+        if (tempo_rest > 0.0f) {
+            attron(COLOR_PAIR(2));
+            mvprintw(linha + 2, 4, "Status: PROCESSANDO [%.1fs]", tempo_rest);
+            attroff(COLOR_PAIR(2));
+        } else if (tempo_rest == -1.0f) {
+            attron(COLOR_PAIR(4) | A_BOLD); 
+            mvprintw(linha + 2, 4, "Status: BLOQUEADO (FILA CHEIA)");
+            attroff(COLOR_PAIR(4) | A_BOLD);
+        } else {
+            mvprintw(linha + 2, 4, "Status: LIVRE");
+        }
+        clrtoeol(); // Limpa lixo gráfico no final da linha
+        
+        // Fila Visual
+        if (fila_real >= TAMANHO_BUFFER) attron(COLOR_PAIR(4));
+        mvprintw(linha + 3, 4, "Fila de Entrada: [%d / %d] itens", fila_real, TAMANHO_BUFFER);
+        if (fila_real >= TAMANHO_BUFFER) attroff(COLOR_PAIR(4));
+        clrtoeol();
     }
     
-    // Estatísticas finais
-    int linha_stats = 4 + (4 * 6) + 1;
-    attron(COLOR_PAIR(1) | A_BOLD);
-    mvprintw(linha_stats, 2, "ESTATISTICAS");
-    attroff(COLOR_PAIR(1) | A_BOLD);
+    attron(COLOR_PAIR(5));
+    mvprintw(20, 2, "Controles: [1-4]Selecionar | [U]pgrades | [Q]Sair");
+    clrtoeol();
+    attroff(COLOR_PAIR(5));
+}
+
+void desenhar_interface_completa() {
+    if (interface_esta_bloqueada()) return;
     
-    attron(COLOR_PAIR(3));
-    mvprintw(linha_stats + 1, 4, "Frutas concluidas: %d/%d", 
-             status_interface.frutas_concluidas, status_interface.total_frutas);
+    // LOCK ESSENCIAL: Impede que o 'input.c' desenhe ou leia ao mesmo tempo
+    pthread_mutex_lock(&status_interface.tela_mutex);
     
-    // Barra de progresso simples
-    int progresso = (status_interface.frutas_concluidas * 20) / status_interface.total_frutas;
-    mvprintw(linha_stats + 2, 4, "Progresso: [");
-    for (int i = 0; i < 20; i++) {
-        if (i < progresso) {
-            addch('#');
-        } else {
-            addch('-');
-        }
-    }
-    addstr("]");
-    attroff(COLOR_PAIR(3));
-    
+    desenhar_conteudo_interface();
     refresh();
+    
     pthread_mutex_unlock(&status_interface.tela_mutex);
 }
 
-void marcar_fruta_entrando_etapa(int fruta_id, Etapa etapa) {
-    pthread_mutex_lock(&status_interface.tela_mutex);
-    status_interface.frutas_em_etapa[etapa]++;
-    
-    // Atualizar apenas a seção relevante da tela
-    int linha_etapa = 4 + (etapa * 6);
-    
-    // Limpar linha de processamento
-    mvprintw(linha_etapa + 2, 17, "                    ");
-    
-    // Redesenhar frutas em processamento
-    attron(COLOR_PAIR(2));
-    int frutas_processando = (status_interface.frutas_em_etapa[etapa] > status_interface.num_maquinas[etapa]) 
-                            ? status_interface.num_maquinas[etapa] 
-                            : status_interface.frutas_em_etapa[etapa];
-    
-    for (int j = 0; j < frutas_processando; j++) {
-        mvprintw(linha_etapa + 2, 17 + (j * 3), "%s", simbolos_etapas[etapa]);
+void* thread_atualizador_interface(void* arg) {
+    while(1) {
+        desenhar_interface_completa();
+        usleep(100000); // 10 FPS
     }
-    attroff(COLOR_PAIR(2));
-    
-    // Atualizar fila de espera
-    int fila_size = status_interface.frutas_em_etapa[etapa] - status_interface.num_maquinas[etapa];
-    mvprintw(linha_etapa + 3, 4, "                              "); // Limpar linha
-    if (fila_size > 0) {
-        attron(COLOR_PAIR(4));
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: ");
-        for (int j = 0; j < fila_size; j++) {
-            mvprintw(linha_etapa + 3, 20 + (j * 2), ".");
-        }
-        attroff(COLOR_PAIR(4));
-    } else {
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: vazia");
-    }
-    
-    refresh();
-    pthread_mutex_unlock(&status_interface.tela_mutex);
+    return NULL;
 }
 
-void marcar_fruta_saindo_etapa(int fruta_id, Etapa etapa) {
-    pthread_mutex_lock(&status_interface.tela_mutex);
-    if (status_interface.frutas_em_etapa[etapa] > 0) {
-        status_interface.frutas_em_etapa[etapa]--;
-    }
-    
-    // Atualizar apenas a seção relevante da tela
-    int linha_etapa = 4 + (etapa * 6);
-    
-    // Limpar linha de processamento
-    mvprintw(linha_etapa + 2, 17, "                    ");
-    
-    // Redesenhar frutas em processamento
-    attron(COLOR_PAIR(2));
-    int frutas_processando = (status_interface.frutas_em_etapa[etapa] > status_interface.num_maquinas[etapa]) 
-                            ? status_interface.num_maquinas[etapa] 
-                            : status_interface.frutas_em_etapa[etapa];
-    
-    for (int j = 0; j < frutas_processando; j++) {
-        mvprintw(linha_etapa + 2, 17 + (j * 3), "%s", simbolos_etapas[etapa]);
-    }
-    attroff(COLOR_PAIR(2));
-    
-    // Atualizar fila de espera
-    int fila_size = status_interface.frutas_em_etapa[etapa] - status_interface.num_maquinas[etapa];
-    mvprintw(linha_etapa + 3, 4, "                              "); // Limpar linha
-    if (fila_size > 0) {
-        attron(COLOR_PAIR(4));
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: ");
-        for (int j = 0; j < fila_size; j++) {
-            mvprintw(linha_etapa + 3, 20 + (j * 2), ".");
-        }
-        attroff(COLOR_PAIR(4));
-    } else {
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: vazia");
-    }
-    
-    refresh();
-    pthread_mutex_unlock(&status_interface.tela_mutex);
+// Setters de dados (Sem lógica de desenho, totalmente seguros)
+void iniciar_processamento_etapa(int etapa, float tempo_total) {
+    pthread_mutex_lock(&status_interface.tempo_mutex);
+    status_interface.tempo_restante[etapa] = tempo_total;
+    pthread_mutex_unlock(&status_interface.tempo_mutex);
+}
+
+void atualizar_tempo_etapa(int etapa, float tempo_decorrido) {
+    pthread_mutex_lock(&status_interface.tempo_mutex);
+    status_interface.tempo_restante[etapa] = tempo_decorrido; 
+    pthread_mutex_unlock(&status_interface.tempo_mutex);
+}
+
+void finalizar_processamento_etapa(int etapa) {
+    pthread_mutex_lock(&status_interface.tempo_mutex);
+    status_interface.tempo_restante[etapa] = 0.0f;
+    pthread_mutex_unlock(&status_interface.tempo_mutex);
+}
+
+void marcar_etapa_bloqueada(int etapa) {
+    pthread_mutex_lock(&status_interface.tempo_mutex);
+    status_interface.tempo_restante[etapa] = -1.0f; 
+    pthread_mutex_unlock(&status_interface.tempo_mutex);
 }
 
 void fruta_concluida(Fruta* f) {
-    pthread_mutex_lock(&status_interface.tela_mutex);
+    pthread_mutex_lock(&status_interface.tempo_mutex);
     status_interface.frutas_concluidas++;
-    
-    // Atualizar estatísticas
-    int linha_stats = 4 + (4 * 6) + 1;
-    attron(COLOR_PAIR(3));
-    mvprintw(linha_stats + 1, 4, "Frutas concluidas: %d/%d", 
-             status_interface.frutas_concluidas, status_interface.total_frutas);
-    
-    // Atualizar barra de progresso
-    int progresso = (status_interface.frutas_concluidas * 20) / status_interface.total_frutas;
-    mvprintw(linha_stats + 2, 4, "Progresso: [");
-    for (int i = 0; i < 20; i++) {
-        if (i < progresso) {
-            addch('#');
-        } else {
-            addch('-');
-        }
-    }
-    addstr("]");
-    attroff(COLOR_PAIR(3));
-    
-    // Mostrar notificação temporária de fruta concluída
-    attron(COLOR_PAIR(1) | A_BOLD);
-    mvprintw(linha_stats + 4, 4, "*** Fruta %d concluida! ***", f->id);
-    attroff(COLOR_PAIR(1) | A_BOLD);
-    
-    refresh();
-    pthread_mutex_unlock(&status_interface.tela_mutex);
-}
-
-void atualizar_maquinas_etapa(Etapa etapa, int delta) {
-    pthread_mutex_lock(&status_interface.tela_mutex);
-    status_interface.num_maquinas[etapa] += delta;
-    
-    // Garantir que não fique negativo
-    if (status_interface.num_maquinas[etapa] < 0) {
-        status_interface.num_maquinas[etapa] = 0;
-    }
-    
-    // Atualizar display da etapa
-    int linha_etapa = 4 + (etapa * 6);
-    attron(COLOR_PAIR(3));
-    mvprintw(linha_etapa + 1, 4, "Maquinas: %d  ", status_interface.num_maquinas[etapa]);
-    attroff(COLOR_PAIR(3));
-    
-    // Atualizar fila de espera também
-    int fila_size = status_interface.frutas_em_etapa[etapa] - status_interface.num_maquinas[etapa];
-    mvprintw(linha_etapa + 3, 4, "                              ");
-    if (fila_size > 0) {
-        attron(COLOR_PAIR(4));
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: ");
-        for (int j = 0; j < fila_size; j++) {
-            mvprintw(linha_etapa + 3, 20 + (j * 2), ".");
-        }
-        attroff(COLOR_PAIR(4));
-    } else {
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: vazia");
-    }
-    
-    refresh();
-    pthread_mutex_unlock(&status_interface.tela_mutex);
-}
-
-void desenhar_fila_espera(Etapa etapa, int tamanho_fila) {
-    pthread_mutex_lock(&status_interface.tela_mutex);
-    int linha_etapa = 4 + (etapa * 6);
-    
-    mvprintw(linha_etapa + 3, 4, "                              ");
-    if (tamanho_fila > 0) {
-        attron(COLOR_PAIR(4));
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: ");
-        for (int j = 0; j < tamanho_fila; j++) {
-            mvprintw(linha_etapa + 3, 20 + (j * 2), ".");
-        }
-        attroff(COLOR_PAIR(4));
-    } else {
-        mvprintw(linha_etapa + 3, 4, "Fila de espera: vazia");
-    }
-    
-    refresh();
-    pthread_mutex_unlock(&status_interface.tela_mutex);
-}
-
-void atualizar_status() {
-    desenhar_interface_completa();
-}
-
-// Função auxiliar para compatibilidade com código antigo
-void desenhar_fruta_em_etapa(int fruta_id, Etapa etapa) {
-    marcar_fruta_entrando_etapa(fruta_id, etapa);
-}
-
-void desenhar_saida_fruta_etapa(int fruta_id, Etapa etapa) {
-    marcar_fruta_saindo_etapa(fruta_id, etapa);
+    pthread_mutex_unlock(&status_interface.tempo_mutex);
 }

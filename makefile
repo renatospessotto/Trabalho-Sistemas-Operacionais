@@ -1,13 +1,37 @@
 CC = gcc
-CFLAGS = -Wall -pthread -lncurses -Wno-deprecated-declarations
+CFLAGS = -Wall -Wextra -pthread -g
+LIBS = -lncurses
 
-OBJS = main.o fruta.o etapas.o interface.o input.o
+# Define a pasta de objetos
+OBJ_DIR = obj
 
-fabrica: $(OBJS)
-	$(CC) -o fabrica $(OBJS) $(CFLAGS)
+# Lista de arquivos objeto (com o prefixo da pasta)
+_OBJS = main.o buffers.o etapas.o fruta.o interface.o input.o economia.o
+OBJS = $(patsubst %,$(OBJ_DIR)/%,$(_OBJS))
 
-%.o: %.c
-	$(CC) -c $< $(CFLAGS)
+# Nome do executável
+TARGET = fabrica
 
+# Regra principal (all)
+all: $(OBJ_DIR) $(TARGET)
+
+# Cria o diretório obj se não existir
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+# Linkagem
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LIBS)
+
+# Regra genérica para compilar qualquer .c em .o dentro da pasta obj
+$(OBJ_DIR)/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Limpeza (apaga a pasta obj inteira)
 clean:
-	rm -f *.o fabrica
+	rm -f $(OBJS) $(TARGET) debug.txt
+	rm -rf $(OBJ_DIR)
+
+# Executar
+run: $(TARGET)
+	./$(TARGET)

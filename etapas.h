@@ -1,15 +1,19 @@
 #ifndef ETAPAS_H
 #define ETAPAS_H
 
-#include "fruta.h"
+// Funções das threads operárias
+void* thread_colheita(void* arg); // Produtor inicial
+void* thread_lavar(void* arg);
+void* thread_cortar(void* arg);
+void* thread_extrair(void* arg);
+void* thread_embalar(void* arg);  // Consumidor final
 
-typedef enum { LAVAR, CORTAR, EXTRAIR, EMBALAR } Etapa;
-
-void init_etapas();
-void destroy_etapas();
-void processar_etapa(Fruta* fruta, Etapa etapa);
-void incrementar_maquinas_etapa(Etapa etapa);
-void decrementar_maquinas_etapa(Etapa etapa);
-int get_num_maquinas_etapa(Etapa etapa);
+// Enumeração para facilitar índices
+typedef enum {
+    ETAPA_LAVAR = 0,
+    ETAPA_CORTAR = 1,
+    ETAPA_EXTRAIR = 2,
+    ETAPA_EMBALAR = 3
+} EtapaID;
 
 #endif
