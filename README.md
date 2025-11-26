@@ -1,94 +1,86 @@
-# Fábrica de Sucos - Simulador com Threads e Semáforos
+# Fábrica de Sucos - Simulação de SO com Threads e Semáforos
 
-Este projeto simula uma fábrica de sucos usando threads (pthread) e semáforos para controlar o acesso às estações de trabalho. A interface usa ncurses para uma visualização organizada e interativa.
+Este projeto é um simulador de linha de produção desenvolvido em C para a disciplina de Sistemas Operacionais. Ele demonstra na prática problemas clássicos de concorrência, utilizando o padrão Produtor-Consumidor, Buffers Circulares, Semáforos e Mutexes.
 
-## Melhorias Implementadas
+A interface utiliza ncurses para visualização em tempo real do estado dos buffers e threads.
 
-### 1. Interface Melhorada com ncurses
-- Layout limpo e organizado com títulos fixos para cada etapa
-- Visualização em tempo real das frutas sendo processadas
-- Filas de espera visíveis quando os semáforos estão bloqueados
-- Barra de progresso para acompanhar o andamento
-- Cores para melhor identificação dos elementos
-- Atualização sem flicker usando refresh() controlado
+---
 
-### 2. Controle Dinâmico de Máquinas
-- Possibilidade de aumentar/diminuir o número de máquinas por etapa em tempo real
-- Controles intuitivos com teclas + e -
-- Seleção de etapa com teclas 1-4
-- Indicador visual da etapa selecionada (>)
+## 🚀 Funcionalidades
 
-### 3. Resolução dos Warnings de Semáforos no macOS
-- Flag `-Wno-deprecated-declarations` adicionada ao Makefile
-- Mantém compatibilidade com sem_t enquanto suprime warnings deprecados
+### 1. Arquitetura de Pipeline (Produtor-Consumidor)
 
-## Estrutura do Projeto
+- **Buffers Circulares**: Entre cada etapa de produção existe uma fila limitada (Buffer).
+- **Bloqueio Automático**: Se uma fila enche, a etapa anterior para automaticamente de produzir (simulando gargalos reais de I/O).
+- **Semáforos POSIX**: Controle rigoroso de acesso às filas (semáforos `empty` e `full`).
+
+### 2. Interface Gráfica (Terminal)
+
+- **Visualização em tempo real** do tamanho das filas.
+- **Status das máquinas**: `LIVRE`, `PROCESSANDO` ou `BLOQUEADO` (quando a fila seguinte está cheia).
+- **Barra de progresso** de tempo para cada operação.
+- **Sistema de menus** navegável via teclado.
+
+### 3. Sistema Econômico e Progressão
+
+- **Dinheiro**: Venda de sucos gera receita.
+- **Upgrades**: O jogador pode comprar melhorias para cada etapa:
+  - **Velocidade**: Reduz o tempo de processamento (simula upgrade de Hardware).
+  - **Qualidade**: Aumenta o valor de venda do suco.
+- **Persistência**: O progresso (dinheiro e upgrades) é salvo automaticamente ao sair (`savegame.txt`).
+
+---
+
+## 🛠️ Estrutura do Projeto
 
 ```
 Trab1/
-├── main.c          # Programa principal
-├── fruta.c/h       # Implementação das threads das frutas
-├── etapas.c/h      # Controle dos semáforos e processamento das etapas
-├── interface.c/h   # Interface ncurses melhorada
-├── input.c/h       # Thread de controle de entrada do usuário
-├── utils.h         # Definições e constantes
-└── makefile        # Compilação com flags corretas
+├── main.c           # Orquestrador (Inicializa buffers, threads e economia)
+├── buffers.c/h      # Implementação das Filas Circulares (Semáforos)
+├── etapas.c/h       # Lógica das Threads Operárias (Produtores/Consumidores)
+├── economia.c/h     # Sistema de Dinheiro, Upgrades e Save/Load
+├── interface.c/h    # Renderização visual com ncurses (Thread-Safe)
+├── input.c/h        # Captura de teclado e menus interativos
+├── config.h         # Constantes de balanceamento e configuração
+└── fruta.c/h        # Estrutura de dados (Item passivo)
 ```
 
-## Etapas da Fábrica
+---
 
-1. **LAVAR** (símbolo: *) - 2 máquinas iniciais
-2. **CORTAR** (símbolo: X) - 1 máquina inicial  
-3. **EXTRAIR** (símbolo: J) - 1 máquina inicial
-4. **EMBALAR** (símbolo: P) - 1 máquina inicial
+## ⚙️ Como Compilar e Executar
 
-## Controles Interativos
-
-- **[1-4]**: Selecionar etapa para ajuste
-- **[+]**: Aumentar número de máquinas na etapa selecionada
-- **[-]**: Diminuir número de máquinas na etapa selecionada
-- **[r]**: Redesenhar tela completa
-- **[q]**: Sair do programa
-
-## Como Compilar e Executar
+Certifique-se de ter `gcc`, `make` e as bibliotecas `ncurses` e `pthread` instaladas.
 
 ```bash
-# Compilar
-make clean && make
+# Limpar compilações anteriores e compilar
+make clean
+make
 
-# Executar
+# Executar a simulação
 ./fabrica
 ```
 
-## Dependências
+---
 
-- **pthread**: Para threads das frutas e controle de entrada
-- **ncurses**: Para interface de terminal melhorada
-- **semáforos POSIX**: Para controle de acesso às estações
+## 🎮 Controles
 
-## Funcionalidades da Interface
+| Tecla   | Ação                                      |
+|---------|------------------------------------------|
+| [1-4]   | Selecionar etapa (1: Lavar, 2: Cortar, etc.) |
+| [U]     | Abrir Menu de Upgrades                   |
+| [V]     | Comprar Velocidade (no menu)             |
+| [Q]     | Comprar Qualidade (no menu)              |
+| [Q] / [X] | Salvar e Sair do Jogo                   |
 
-### Visualização em Tempo Real
-- Cada etapa mostra quantas frutas estão sendo processadas
-- Fila de espera exibida com pontos (.) quando há mais frutas que máquinas
-- Contador de frutas concluídas e barra de progresso
-- Notificações quando frutas são concluídas
+---
 
-### Controle Dinâmico
-- Ajuste em tempo real do número de máquinas por etapa
-- Efeito imediato na simulação (semáforos são atualizados dinamicamente)
-- Interface responde instantaneamente aos comandos
+## 🧠 Conceitos de SO Aplicados
 
-### Sincronização Thread-Safe
-- Mutex protege atualizações da interface
-- Semáforos controlam acesso às estações de trabalho
-- Threads de frutas processam sequencialmente as 4 etapas
+- **Threads**: Cada etapa da fábrica (Lavar, Cortar, Extrair, Embalar) roda em sua própria thread independente.
+- **Exclusão Mútua (Mutex)**: Proteção de variáveis globais (dinheiro) e recursos compartilhados (tela do terminal) para evitar Race Conditions.
+- **Sincronização (Semáforos)**: Coordenação entre produtores e consumidores para garantir que não haja escrita em buffers cheios ou leitura de buffers vazios.
+- **Deadlock Prevention**: O fluxo de dados é estritamente unidirecional e hierárquico, prevenindo impasses cíclicos.
 
-## Observações Técnicas
+---
 
-- **macOS**: Flag `-Wno-deprecated-declarations` resolve warnings de semáforos deprecados
-- **Caracteres**: Apenas ASCII básico para máxima compatibilidade
-- **Performance**: Atualizações parciais da tela para evitar flicker
-- **Escalabilidade**: Fácil ajuste do número de frutas via `MAX_FRUTAS` em utils.h
-
-Este projeto demonstra conceitos importantes de programação concorrente, sincronização de threads e desenvolvimento de interfaces de terminal interativas.
+Desenvolvido para a disciplina de Sistemas Operacionais - 2025
