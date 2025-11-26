@@ -105,7 +105,30 @@ void* thread_input(void* arg) {
         ch = getch();
         pthread_mutex_unlock(&status_interface.tela_mutex);
         
-        if (ch == 'x' || ch == 'X' || ch == 'q' || ch == 'Q') break;
+        // Sair e Salvar (Q ou X)
+        if (ch == 'x' || ch == 'X' || ch == 'q' || ch == 'Q') {
+            // 1. Bloqueia atualizações automáticas da interface
+            bloquear_interface();
+            
+            // 2. Feedback Visual: Desenha caixa de "Salvando"
+            pthread_mutex_lock(&status_interface.tela_mutex);
+            clear(); // <--- LIMPA A TELA DE FUNDO AGORA
+            attron(COLOR_PAIR(2) | A_BOLD); // Amarelo/Dourado
+            mvprintw(10, 20, "+-------------------------+");
+            mvprintw(11, 20, "|    SALVANDO JOGO...     |");
+            mvprintw(12, 20, "+-------------------------+");
+            attroff(COLOR_PAIR(2) | A_BOLD);
+            refresh();
+            pthread_mutex_unlock(&status_interface.tela_mutex);
+
+            // 3. Persistência de Dados
+            salvar_progresso("savegame.txt");
+            
+            // 4. Pausa dramática (para usuário ver que salvou)
+            sleep(1); 
+            
+            break;
+        }
         
         if (ch == ERR) {
             usleep(50000);

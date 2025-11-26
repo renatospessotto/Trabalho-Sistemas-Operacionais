@@ -1,0 +1,9 @@
+dinheiro=40.00
+etapa0_vel=0
+etapa0_qual=0
+etapa1_vel=0
+etapa1_qual=0
+etapa2_vel=0
+etapa2_qual=0
+etapa3_vel=0
+etapa3_qual=0
