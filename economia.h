@@ -30,6 +30,7 @@ void finalizar_economia();
 // Transações
 void adicionar_receita();
 double obter_dinheiro();
+void debitar_dinheiro(double valor);
 
 // Upgrades
 int comprar_upgrade_velocidade(int etapa);

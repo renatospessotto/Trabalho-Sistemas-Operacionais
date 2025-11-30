@@ -13,6 +13,7 @@ StatusInterface status_interface = {
     .tela_mutex = PTHREAD_MUTEX_INITIALIZER,
     .interface_bloqueada = 0,
     .tempo_restante = {0.0f, 0.0f, 0.0f, 0.0f},
+    .etapa_travada = {0, 0, 0, 0},
     .tempo_mutex = PTHREAD_MUTEX_INITIALIZER
 };
 
@@ -82,9 +83,10 @@ static void desenhar_conteudo_interface() {
                  obter_nivel_velocidade(i), obter_nivel_qualidade(i));
         clrtoeol();
 
-        // Tempo restante
+        // Tempo restante e estado de travamento
         pthread_mutex_lock(&status_interface.tempo_mutex);
         float tempo_rest = status_interface.tempo_restante[i];
+        int esta_travada = status_interface.etapa_travada[i];
         pthread_mutex_unlock(&status_interface.tempo_mutex);
 
         // Fila real
@@ -97,14 +99,14 @@ static void desenhar_conteudo_interface() {
         }
 
         // Status visual
-        if (tempo_rest > 0.0f) {
+        if (esta_travada) {
+            attron(COLOR_PAIR(4) | A_BOLD);
+            mvprintw(linha + 2, 4, "Status: TRAVADO (FILA SEGUINTE CHEIA)");
+            attroff(COLOR_PAIR(4) | A_BOLD);
+        } else if (tempo_rest > 0.0f) {
             attron(COLOR_PAIR(2));
             mvprintw(linha + 2, 4, "Status: PROCESSANDO [%.1fs]", tempo_rest);
             attroff(COLOR_PAIR(2));
-        } else if (tempo_rest == -1.0f) {
-            attron(COLOR_PAIR(4) | A_BOLD);
-            mvprintw(linha + 2, 4, "Status: BLOQUEADO (FILA CHEIA)");
-            attroff(COLOR_PAIR(4) | A_BOLD);
         } else {
             mvprintw(linha + 2, 4, "Status: LIVRE");
         }
@@ -159,13 +161,15 @@ void finalizar_processamento_etapa(int etapa) {
     pthread_mutex_unlock(&status_interface.tempo_mutex);
 }
 
-void marcar_etapa_bloqueada(int etapa) {
+
+
+void marcar_etapa_travada(int etapa, int travada) {
     pthread_mutex_lock(&status_interface.tempo_mutex);
-    status_interface.tempo_restante[etapa] = -1.0f;
+    status_interface.etapa_travada[etapa] = travada;
     pthread_mutex_unlock(&status_interface.tempo_mutex);
 }
 
-void fruta_concluida(Fruta* f) {
+void fruta_concluida() {
     pthread_mutex_lock(&status_interface.tempo_mutex);
     status_interface.frutas_concluidas++;
     pthread_mutex_unlock(&status_interface.tempo_mutex);

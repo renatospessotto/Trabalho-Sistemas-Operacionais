@@ -28,9 +28,9 @@ void inicializar_economia() {
     sistema_economico.dinheiro_total = 0.0;
     
     // Configuração inicial (Valores Base)
-    float tempos_base[4] = { TEMPO_BASE_COLHEITA, TEMPO_BASE_LAVAGEM, TEMPO_BASE_EXTRACAO, TEMPO_BASE_EMBALAGEM };
-    int custos_vel[4] = { CUSTO_INICIAL_VEL_COLHEITA, CUSTO_INICIAL_VEL_LAVAGEM, CUSTO_INICIAL_VEL_EXTRACAO, CUSTO_INICIAL_VEL_EMBALAGEM };
-    int custos_qual[4] = { CUSTO_INICIAL_QUAL_COLHEITA, CUSTO_INICIAL_QUAL_LAVAGEM, CUSTO_INICIAL_QUAL_EXTRACAO, CUSTO_INICIAL_QUAL_EMBALAGEM };
+    float tempos_base[4] = { TEMPO_BASE_LAVAGEM, TEMPO_BASE_CORTAR, TEMPO_BASE_EXTRACAO, TEMPO_BASE_EMBALAGEM };
+    int custos_vel[4] = { CUSTO_INICIAL_VEL_LAVAGEM, CUSTO_INICIAL_VEL_CORTAR, CUSTO_INICIAL_VEL_EXTRACAO, CUSTO_INICIAL_VEL_EMBALAGEM };
+    int custos_qual[4] = { CUSTO_INICIAL_QUAL_LAVAGEM, CUSTO_INICIAL_QUAL_CORTAR, CUSTO_INICIAL_QUAL_EXTRACAO, CUSTO_INICIAL_QUAL_EMBALAGEM };
     
     for(int i = 0; i < 4; i++) {
         sistema_economico.etapas[i].nivel_velocidade = 0;
@@ -62,6 +62,12 @@ double obter_dinheiro() {
     double valor = sistema_economico.dinheiro_total;
     pthread_mutex_unlock(&sistema_economico.dinheiro_mutex);
     return valor;
+}
+
+void debitar_dinheiro(double valor) {
+    pthread_mutex_lock(&sistema_economico.dinheiro_mutex);
+    sistema_economico.dinheiro_total -= valor;
+    pthread_mutex_unlock(&sistema_economico.dinheiro_mutex);
 }
 
 float calcular_tempo_etapa(int etapa) {

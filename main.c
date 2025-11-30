@@ -7,13 +7,12 @@
 #include "interface.h"
 #include "input.h"
 #include "economia.h"
-#include "upgrades.h"
+
 
 
 int main() {
     // 1. Inicializações
     inicializar_economia();
-    init_upgrades();
     init_interface();
     
     // Inicializar Buffers (CRÍTICO)

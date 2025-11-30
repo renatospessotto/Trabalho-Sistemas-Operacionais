@@ -1,4 +1,4 @@
-#include "upgrades.h"
+
 #include "input.h"
 #include "interface.h"
 #include "economia.h"
@@ -83,13 +83,11 @@ void processar_input_upgrades() {
             mostrar_menu_upgrades();
         }
         else if(ch == 'v' || ch == 'V') {
-            if (comprar_upgrade_velocidade(etapa_selecionada))
-                tocar_som_upgrade();  // OPCIONAL, se existir
+            comprar_upgrade_velocidade(etapa_selecionada);
             mostrar_menu_upgrades();
         }
         else if(ch == 'q' || ch == 'Q') {
-            if (comprar_upgrade_qualidade(etapa_selecionada))
-                tocar_som_upgrade();  // OPCIONAL
+            comprar_upgrade_qualidade(etapa_selecionada);
             mostrar_menu_upgrades();
         }
     }

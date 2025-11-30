@@ -48,10 +48,18 @@ void* thread_lavar(void* arg) {
         // 2. Trabalha
         simular_trabalho(ETAPA_LAVAR);
         
-        // 3. Tenta passar. Se CORTAR estiver cheia, TRAVA AQUI.
-        // O status na tela ficará "LIVRE" (verde), mas a fila anterior vai encher
-        // porque esta máquina não voltou para o passo 1.
+        // 3. Deposita normalmente
         depositar_fruta(&buffer_lavagem_corte, f);
+        
+        // 4. Verifica se a fila ficou cheia após depositar
+        if (fila_ficou_cheia(&buffer_lavagem_corte)) {
+            marcar_etapa_travada(ETAPA_LAVAR, 1); // Marca como travado
+            // Fica travado até alguém retirar da fila
+            while (fila_ficou_cheia(&buffer_lavagem_corte)) {
+                usleep(50000); // Verifica a cada 50ms
+            }
+            marcar_etapa_travada(ETAPA_LAVAR, 0); // Desfaz travamento
+        }
     }
     return NULL;
 }
@@ -61,7 +69,18 @@ void* thread_cortar(void* arg) {
     while(1) {
         Fruta* f = retirar_fruta(&buffer_lavagem_corte);
         simular_trabalho(ETAPA_CORTAR);
+        
+        // Deposita normalmente
         depositar_fruta(&buffer_corte_extracao, f);
+        
+        // Verifica se a fila ficou cheia após depositar
+        if (fila_ficou_cheia(&buffer_corte_extracao)) {
+            marcar_etapa_travada(ETAPA_CORTAR, 1);
+            while (fila_ficou_cheia(&buffer_corte_extracao)) {
+                usleep(50000);
+            }
+            marcar_etapa_travada(ETAPA_CORTAR, 0);
+        }
     }
     return NULL;
 }
@@ -71,7 +90,18 @@ void* thread_extrair(void* arg) {
     while(1) {
         Fruta* f = retirar_fruta(&buffer_corte_extracao);
         simular_trabalho(ETAPA_EXTRAIR);
+        
+        // Deposita normalmente
         depositar_fruta(&buffer_extracao_embalagem, f);
+        
+        // Verifica se a fila ficou cheia após depositar
+        if (fila_ficou_cheia(&buffer_extracao_embalagem)) {
+            marcar_etapa_travada(ETAPA_EXTRAIR, 1);
+            while (fila_ficou_cheia(&buffer_extracao_embalagem)) {
+                usleep(50000);
+            }
+            marcar_etapa_travada(ETAPA_EXTRAIR, 0);
+        }
     }
     return NULL;
 }
@@ -85,7 +115,7 @@ void* thread_embalar(void* arg) {
         simular_trabalho(ETAPA_EMBALAR);
         
         adicionar_receita(); 
-        fruta_concluida(f); 
+        fruta_concluida(); 
         
         // A fruta sai do sistema aqui
         destruir_fruta(f);

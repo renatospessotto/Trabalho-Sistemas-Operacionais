@@ -32,5 +32,6 @@ Fruta* retirar_fruta(BufferCircular* b);           // Bloqueante se vazio
 
 // Função segura para interface ler tamanho
 int obter_tamanho_fila(BufferCircular* b);
+int fila_ficou_cheia(BufferCircular* b);
 
 #endif

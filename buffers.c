@@ -85,3 +85,11 @@ int obter_tamanho_fila(BufferCircular* b) {
     pthread_mutex_unlock(&b->mutex);
     return valor;
 }
+
+int fila_ficou_cheia(BufferCircular* b) {
+    int valor;
+    pthread_mutex_lock(&b->mutex);
+    valor = (b->count >= TAMANHO_BUFFER);
+    pthread_mutex_unlock(&b->mutex);
+    return valor;
+}

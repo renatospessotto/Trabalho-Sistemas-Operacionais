@@ -13,6 +13,7 @@ typedef struct {
 
     // Controle de tempo visual por etapa
     float tempo_restante[4];         // Tempo restante de cada etapa
+    int etapa_travada[4];            // Estado de travamento por fila cheia
     pthread_mutex_t tempo_mutex;     // Mutex do tempo
 } StatusInterface;
 
@@ -36,9 +37,9 @@ void desenhar_interface_completa();
 void iniciar_processamento_etapa(int etapa, float tempo_total);
 void atualizar_tempo_etapa(int etapa, float tempo_decorrido);
 void finalizar_processamento_etapa(int etapa);
-void fruta_concluida(Fruta* f);
+void marcar_etapa_travada(int etapa, int travada);
+void fruta_concluida();
 
-// HUD (informações fixas na tela)
-void desenhar_hud();
+
 
 #endif

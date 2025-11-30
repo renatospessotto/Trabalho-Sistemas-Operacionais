@@ -7,7 +7,7 @@ LIBS = -lncurses
 OBJ_DIR = obj
 
 # Lista de arquivos fonte
-SRCS = main.c buffers.c etapas.c fruta.c interface.c input.c economia.c upgrades.c
+SRCS = main.c buffers.c etapas.c fruta.c interface.c input.c economia.c
 
 # Lista de objetos dentro da pasta obj
 OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
