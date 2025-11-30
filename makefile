@@ -1,33 +1,36 @@
+# Compilador e flags
 CC = gcc
 CFLAGS = -Wall -Wextra -pthread -g
 LIBS = -lncurses
 
-# Define a pasta de objetos
+# Diretório para objetos
 OBJ_DIR = obj
 
-# Lista de arquivos objeto (com o prefixo da pasta)
-_OBJS = main.o buffers.o etapas.o fruta.o interface.o input.o economia.o
-OBJS = $(patsubst %,$(OBJ_DIR)/%,$(_OBJS))
+# Lista de arquivos fonte
+SRCS = main.c buffers.c etapas.c fruta.c interface.c input.c economia.c upgrades.c
+
+# Lista de objetos dentro da pasta obj
+OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRCS))
 
 # Nome do executável
 TARGET = fabrica
 
-# Regra principal (all)
+# Regra principal
 all: $(OBJ_DIR) $(TARGET)
 
 # Cria o diretório obj se não existir
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-# Linkagem
+# Linkagem final
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LIBS)
 
-# Regra genérica para compilar qualquer .c em .o dentro da pasta obj
+# Compilação de cada .c em .o dentro de obj
 $(OBJ_DIR)/%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Limpeza (apaga a pasta obj inteira)
+# Limpeza
 clean:
 	rm -f $(OBJS) $(TARGET) debug.txt
 	rm -rf $(OBJ_DIR)
