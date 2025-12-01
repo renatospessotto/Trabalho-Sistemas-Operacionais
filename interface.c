@@ -86,11 +86,12 @@ static void calcular_tps() {
 
 // Desenha a animação do buffer
 static void desenhar_animacao_buffer(int linha_base, BufferCircular* b) {
-    // Linha de desenho é 3 linhas abaixo da linha base da etapa
     int linha_desenho = linha_base; 
 
-    // O mutex não é estritamente necessário se assumirmos que o 
-    // array e o count são lidos em sequência (que é o que acontece aqui)
+    // Limpa a área da esteira (da Coluna 40 em diante) antes de desenhar
+    move(linha_desenho, 40);
+    clrtoeol(); 
+
     pthread_mutex_lock(&b->mutex); 
     
     int fila_real = b->count;
@@ -142,6 +143,7 @@ static void desenhar_conteudo_interface() {
 
     extern int etapa_selecionada;
     for (int i = 0; i < 4; i++) {
+        // Espaçamento corrigido (i * 5)
         int linha = 4 + (i * 5);
 
         // Cursor de seleção
@@ -210,9 +212,11 @@ static void desenhar_conteudo_interface() {
             mvprintw(linha + 2, 4, "Status: LIVRE");
         }
         clrtoeol();
-        move(linha + 3, 0); // Mova o cursor para o início da linha
+        
+        // Fila visual 
+        move(linha + 3, 0); 
         clrtoeol();
-        // Fila visual (Texto)
+        
         if (fila_real >= TAMANHO_BUFFER) attron(COLOR_PAIR(4));
         mvprintw(linha + 3, 4, "Fila de Entrada: [%d / %d] itens", fila_real, TAMANHO_BUFFER);
         if (fila_real >= TAMANHO_BUFFER) attroff(COLOR_PAIR(4));
@@ -225,8 +229,9 @@ static void desenhar_conteudo_interface() {
         clrtoeol(); // Limpa o restante da linha
     }
 
+   
     attron(COLOR_PAIR(5));
-    mvprintw(20, 2, "Controles: [1-4]Selecionar | [U]pgrades | [Q]Sair");
+    mvprintw(25, 2, "Controles: [1-4]Selecionar | [U]pgrades | [Q]Sair");
     clrtoeol();
     attroff(COLOR_PAIR(5));
 }
