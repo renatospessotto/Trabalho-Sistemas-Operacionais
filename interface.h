@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <ncurses.h>
 #include "fruta.h" 
+#include <time.h> // NOVO: Adicionado para time_t
 
 // Estrutura de estado da interface
 typedef struct {
@@ -15,6 +16,11 @@ typedef struct {
     float tempo_restante[4];         // Tempo restante de cada etapa
     int etapa_travada[4];            // Estado de travamento por fila cheia
     pthread_mutex_t tempo_mutex;     // Mutex do tempo
+
+    // NOVO: Para cálculo de TPS
+    int tps_concluidas_anterior;     // Contador de frutas no último cálculo de TPS
+    time_t tps_ultima_medicao;       // Timestamp do último cálculo de TPS
+    float tps_atual;                 // Valor atual de TPS
 } StatusInterface;
 
 // Variável global (declarada no interface.c)
@@ -33,13 +39,15 @@ int interface_esta_bloqueada();
 // Função principal de desenho 
 void desenhar_interface_completa();
 
-//  Chamadas vindas das threads das etapas 
+// Chamadas vindas das threads das etapas 
 void iniciar_processamento_etapa(int etapa, float tempo_total);
 void atualizar_tempo_etapa(int etapa, float tempo_decorrido);
 void finalizar_processamento_etapa(int etapa);
 void marcar_etapa_travada(int etapa, int travada);
-void fruta_concluida();
+void fruta_concluida(); // Função original
 
+// NOVO: Getter para o tempo total de uma etapa (usado para cálculo de progresso)
+float obter_tempo_etapa_calculado(int etapa);
 
 
 #endif

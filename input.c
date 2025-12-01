@@ -1,4 +1,3 @@
-
 #include "input.h"
 #include "interface.h"
 #include "economia.h"
@@ -7,9 +6,14 @@
 #include <unistd.h>
 #include <ncurses.h>
 #include <pthread.h>
+#include <string.h> // NOVO: Necessário para usar sprintf/strcpy
 
 // Etapa selecionada no menu de upgrades
 int etapa_selecionada = 0;
+// NOVO: Variável global para mensagens de feedback
+char feedback_mensagem[100] = ""; 
+
+static const char* nomes[] = {"LAVAR", "CORTAR", "EXTRAIR", "EMBALAR"};
 
 void mostrar_menu_upgrades() {
     bloquear_interface();  // Impede a interface de redesenhar durante o menu
@@ -17,6 +21,7 @@ void mostrar_menu_upgrades() {
     pthread_mutex_lock(&status_interface.tela_mutex);
 
     clear();
+    refresh();
 
     attron(COLOR_PAIR(1) | A_BOLD);
     mvprintw(2, 15, "=== MENU DE UPGRADES ===");
@@ -25,11 +30,19 @@ void mostrar_menu_upgrades() {
     attron(COLOR_PAIR(2) | A_BOLD);
     mvprintw(4, 5, "Dinheiro disponível: R$ %.2f", obter_dinheiro());
     attroff(COLOR_PAIR(2) | A_BOLD);
-
-    const char* nomes[] = {"LAVAR", "CORTAR", "EXTRAIR", "EMBALAR"};
+    
+    // NOVO: Exibe a mensagem de feedback
+    if (feedback_mensagem[0] != '\0') {
+        attron(COLOR_PAIR(4) | A_BOLD); // Vermelho para feedback/erro
+        mvprintw(6, 5, ">> %s <<", feedback_mensagem);
+        attroff(COLOR_PAIR(4) | A_BOLD);
+        // Limpa a mensagem após exibir
+        strcpy(feedback_mensagem, ""); 
+    }
+    // FIM NOVO
 
     for(int i = 0; i < 4; i++) {
-        int linha = 7 + (i * 3);
+        int linha = 8 + (i * 3); // Linhas ajustadas para dar espaço ao feedback
 
         if(i == etapa_selecionada) {
             attron(COLOR_PAIR(3) | A_BOLD);
@@ -52,8 +65,8 @@ void mostrar_menu_upgrades() {
     }
 
     attron(COLOR_PAIR(5));
-    mvprintw(19, 5, "INSTRUÇÕES:");
-    mvprintw(20, 5, "[1-4] Selecionar etapa | [V] Velocidade | [Q] Qualidade | [ESC] Voltar");
+    mvprintw(21, 5, "INSTRUÇÕES:"); // Linhas ajustadas
+    mvprintw(22, 5, "[1-4] Selecionar etapa | [V] Velocidade | [Q] Qualidade | [ESC] Voltar");
     attroff(COLOR_PAIR(5));
 
     refresh();
@@ -83,11 +96,21 @@ void processar_input_upgrades() {
             mostrar_menu_upgrades();
         }
         else if(ch == 'v' || ch == 'V') {
-            comprar_upgrade_velocidade(etapa_selecionada);
+            // NOVO: Processa a compra e define a mensagem de feedback
+            if(comprar_upgrade_velocidade(etapa_selecionada)) {
+                sprintf(feedback_mensagem, "SUCESSO: Velocidade de %s melhorada!", nomes[etapa_selecionada]);
+            } else {
+                sprintf(feedback_mensagem, "ERRO: Nível máximo ou Dinheiro Insuficiente!");
+            }
             mostrar_menu_upgrades();
         }
         else if(ch == 'q' || ch == 'Q') {
-            comprar_upgrade_qualidade(etapa_selecionada);
+            // NOVO: Processa a compra e define a mensagem de feedback
+            if(comprar_upgrade_qualidade(etapa_selecionada)) {
+                sprintf(feedback_mensagem, "SUCESSO: Qualidade de %s melhorada!", nomes[etapa_selecionada]);
+            } else {
+                sprintf(feedback_mensagem, "ERRO: Nível máximo ou Dinheiro Insuficiente!");
+            }
             mostrar_menu_upgrades();
         }
     }
@@ -95,7 +118,7 @@ void processar_input_upgrades() {
     desbloquear_interface();
 }
 
-void* thread_input(void* arg) {
+void* thread_input(void*) {
     int ch;
 
     while (1) {
@@ -132,8 +155,16 @@ void* thread_input(void* arg) {
 
         // MENU DE UPGRADES
         if (ch == 'u' || ch == 'U') {
+            // Garante que a mensagem de feedback não apareça no menu principal
+            strcpy(feedback_mensagem, ""); 
             mostrar_menu_upgrades();
             processar_input_upgrades();
+        }
+        
+        // Seleção de etapa (para o menu principal)
+        if (ch >= '1' && ch <= '4') {
+            extern int etapa_selecionada;
+            etapa_selecionada = ch - '1';
         }
     }
 

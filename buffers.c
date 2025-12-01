@@ -93,3 +93,11 @@ int fila_ficou_cheia(BufferCircular* b) {
     pthread_mutex_unlock(&b->mutex);
     return valor;
 }
+
+// Função para obter o ponteiro do array do buffer
+Fruta** obter_array_frutas(BufferCircular* b) {
+    // A thread chamadora (interface) deve proteger esta leitura 
+    // com o mutex do buffer 'b' se quiser garantir um snapshot
+    // dos índices, mas aqui só retornamos o ponteiro do array.
+    return b->buffer;
+}
